@@ -9,7 +9,7 @@ import uuid
 import json
 import asyncio
 
-API_URL = "https://smilingwolf-wd-tagger.hf.space"
+API_URL = "https://smilingwolf-wd-tagger.hf.space/gradio_api"
 
 @register("tagger", "图片标签插件", "一个用于给图片添加标签的插件", "1.0.0", "repo url")
 class MyPlugin(Star):
@@ -66,73 +66,48 @@ class MyPlugin(Star):
                 
         raise Exception("无法获取图片数据")
     
+    # 上传图片(测试通过)
     async def upload_image(self, session: aiohttp.ClientSession, image_bytes: bytes) -> str:
         """上传图片到API服务器"""
-        # 生成上传ID
-        upload_id = str(uuid.uuid4())
-        upload_url = f"{API_URL}/upload?upload_id={upload_id}"
-        
-        # 准备文件数据
-        form = aiohttp.FormData()
-        form.add_field('files', image_bytes, filename='image.png')
-        
-        # 上传图片
-        print("上传图片...")
-        async with session.post(upload_url, data=form) as response:
-            if response.status != 200:
-                raise Exception(f"上传失败: {response.status}")
-            result = await response.json()
-            print(f"上传结果: {result}")
-            return result[0]  # 返回图片的相对路径
-    
-    async def join_queue(self, session: aiohttp.ClientSession, image_path: str) -> str:
-        """加入分析队列"""
-        # 准备请求数据
-        data = {
-            "data": [
-                image_path,  # 图片路径
-                "SmilingWolf/wd-swinv2-tagger-v3",  # 模型名称
-                0.35,  # 阈值
-                False,
-                0.85,
-                False
-            ]
-        }
-        
-        # 发送请求
-        print("加入分析队列...")
-        async with session.post(f"{API_URL}/queue/join", json=data) as response:
-            if response.status != 200:
-                raise Exception(f"加入队列失败: {response.status}")
-            result = await response.json()
-            print(f"加入队列结果: {result}")
-            return result.get('hash')  # 返回会话哈希值
-    
-    async def get_result(self, session: aiohttp.ClientSession, hash_id: str) -> str:
-        """获取分析结果"""
-        # 轮询获取结果
-        for _ in range(30):  # 最多等待30秒
-            print(f"获取结果，hash: {hash_id}")
-            async with session.get(f"{API_URL}/queue/data?session_hash={hash_id}") as response:
-                if response.status != 200:
-                    raise Exception(f"获取结果失败: {response.status}")
-                result = await response.json()
-                print(f"获取结果响应: {result}")
-                
-                if result.get('status') == 'complete':
-                    # 解析结果
-                    data = result.get('data', [])
-                    if data and isinstance(data, list) and data[0]:
-                        tag_list = [f"{tag[0]} ({tag[1]:.2f})" for tag in data[0]]
-                        return "\n".join(tag_list)
-                    return "❌ 结果格式错误"
-                    
-            # 等待1秒后重试
-            await asyncio.sleep(1)
+        try:
+            # 生成上传ID
+            upload_id = str(uuid.uuid4())
+            upload_url = f"{API_URL}/upload?upload_id={upload_id}"
             
-        return "❌ 等待结果超时"
+            # 准备文件数据
+            form = aiohttp.FormData()
+            form.add_field('files', image_bytes, filename='image.png')
+            
+            # 打印调试信息
+            print(f"准备上传图片...")
+            print(f"上传URL: {upload_url}")
+            print(f"图片大小: {len(image_bytes)} 字节")
+            
+            # 上传图片
+            async with session.post(upload_url, data=form) as response:
+                print(f"上传响应状态码: {response.status}")
+                print(f"上传响应头: {response.headers}")
+                
+                if response.status != 200:
+                    response_text = await response.text()
+                    print(f"错误响应内容: {response_text}")
+                    raise Exception(f"上传失败: HTTP {response.status}")
+                    
+                result = await response.json()
+                print(f"上传成功，返回结果: {result}")
+                return result[0]  # 返回图片的相对路径
+                
+        except aiohttp.ClientError as e:
+            print(f"网络错误: {str(e)}")
+            raise Exception(f"网络错误: {str(e)}")
+        except json.JSONDecodeError as e:
+            print(f"解析响应JSON失败: {str(e)}")
+            raise Exception(f"解析响应JSON失败: {str(e)}")
+        except Exception as e:
+            print(f"上传过程中出现未知错误: {str(e)}")
+            raise
     
-    # 图片分析(API调用还有问题⚠️)
+    # 分析图片
     async def analyze_image(self, image_bytes: bytes) -> str:
         """使用API分析图片标签"""
         try:
@@ -140,12 +115,29 @@ class MyPlugin(Star):
                 # 1. 上传图片
                 image_path = await self.upload_image(session, image_bytes)
                 
-                # 2. 加入分析队列
-                hash_id = await self.join_queue(session, image_path)
+                # 2. 直接获取分析结果
+                url = f"{API_URL}/file={image_path}"
+                print(f"请求分析结果...")
+                print(f"请求URL: {url}")
                 
-                # 3. 获取结果
-                return await self.get_result(session, hash_id)
-                
+                async with session.get(url) as response:
+                    print(f"分析响应状态码: {response.status}")
+                    print(f"分析响应头: {response.headers}")
+                    
+                    if response.status != 200:
+                        response_text = await response.text()
+                        print(f"错误响应内容: {response_text}")
+                        raise Exception(f"分析失败: HTTP {response.status}")
+                        
+                    result = await response.json()
+                    print(f"分析结果: {result}")
+                    
+                    # 解析标签
+                    if isinstance(result, list) and result:
+                        tag_list = [f"{tag[0]} ({tag[1]:.2f})" for tag in result]
+                        return "\n".join(tag_list)
+                    return "❌ 返回数据格式错误"
+                    
         except Exception as e:
             print(f"分析图片时出错: {str(e)}")
             return f"❌ 调用API时出错：{str(e)}"
