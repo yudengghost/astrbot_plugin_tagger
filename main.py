@@ -16,6 +16,7 @@ class MyPlugin(Star):
     def __init__(self, context: Context):
         super().__init__(context)
         self.waiting_info = None
+        self.session_id = str(uuid.uuid4())
     
     # 获取图片数据(测试通过)
     async def get_image_data(self, event: AstrMessageEvent, file_id: str) -> bytes:
@@ -107,6 +108,110 @@ class MyPlugin(Star):
             print(f"上传过程中出现未知错误: {str(e)}")
             raise
     
+    # 加入分析队列
+    async def join_queue(self, session: aiohttp.ClientSession, image_path: str) -> str:
+        """加入分析队列"""
+        try:
+            # 准备请求数据
+            data = {
+                "data": [
+                    {
+                        "path": image_path,
+                        "url": f"{API_URL}/file={image_path}",
+                        "size": None,
+                        "mime_type": ""
+                    },
+                    "SmilingWolf/wd-swinv2-tagger-v3",  # 模型名称
+                    0.35,  # 阈值
+                    False,
+                    0.85,
+                    False
+                ],
+                "event_data": None,
+                "fn_index": 2,
+                "trigger_id": 18, 
+                "session_hash": self.session_id  # 生成一个随机session_hash
+            }
+            
+            # 打印调试信息
+            print(f"加入队列...")
+            print(f"请求URL: {API_URL}/queue/join")
+            print(f"请求数据: {json.dumps(data, ensure_ascii=False)}")
+            
+            # 发送请求
+            async with session.post(f"{API_URL}/queue/join", json=data) as response:
+                print(f"队列响应状态码: {response.status}")
+                print(f"队列响应头: {response.headers}")
+                
+                if response.status != 200:
+                    response_text = await response.text()
+                    print(f"错误响应内容: {response_text}")
+                    raise Exception(f"加入队列失败: HTTP {response.status}")
+                    
+                result = await response.json()
+                print(f"加入队列成功，返回结果: {result}")
+                return 
+                
+        except Exception as e:
+            print(f"加入队列时出错: {str(e)}")
+            raise
+    
+    # 获取分析结果
+    async def get_result(self, session: aiohttp.ClientSession) -> str:
+        """获取分析结果"""
+        try:
+            url = f"{API_URL}/queue/data"
+            params = {
+                "session_hash": self.session_id
+            }
+            
+            print(f"开始获取结果...")
+            print(f"请求URL: {url}")
+            print(f"请求参数: {params}")
+            
+            async with session.get(url, params=params) as response:
+                print(f"结果响应状态码: {response.status}")
+                print(f"结果响应头: {response.headers}")
+                
+                if response.status != 200:
+                    response_text = await response.text()
+                    print(f"错误响应内容: {response_text}")
+                    raise Exception(f"获取结果失败: HTTP {response.status}")
+                
+                # 读取SSE响应
+                async for line in response.content:
+                    line = line.decode('utf-8').strip()
+                    if not line or not line.startswith('data: '):
+                        continue
+                        
+                    # 解析JSON数据
+                    try:
+                        data = json.loads(line[6:])  # 跳过'data: '前缀
+                        print(f"收到SSE数据: {data}")
+                        
+                        # 检查是否是最终结果
+                        if data.get('msg') == 'process_completed':
+                            output = data.get('output', {})
+                            result_data = output.get('data', [])
+                            
+                            if result_data and len(result_data) > 0:
+                                # 直接返回第一个元素（标签字符串）
+                                return result_data[0]
+                            return "❌ 未找到标签数据"
+                            
+                        elif data.get('msg') == 'close_stream':
+                            break
+                            
+                    except json.JSONDecodeError as e:
+                        print(f"解析JSON出错: {e}")
+                        continue
+                
+            return "❌ 未收到有效的分析结果"
+            
+        except Exception as e:
+            print(f"获取结果时出错: {str(e)}")
+            raise
+    
     # 分析图片
     async def analyze_image(self, image_bytes: bytes) -> str:
         """使用API分析图片标签"""
@@ -115,29 +220,12 @@ class MyPlugin(Star):
                 # 1. 上传图片
                 image_path = await self.upload_image(session, image_bytes)
                 
-                # 2. 直接获取分析结果
-                url = f"{API_URL}/file={image_path}"
-                print(f"请求分析结果...")
-                print(f"请求URL: {url}")
+                # 2. 加入分析队列
+                await self.join_queue(session, image_path)
                 
-                async with session.get(url) as response:
-                    print(f"分析响应状态码: {response.status}")
-                    print(f"分析响应头: {response.headers}")
-                    
-                    if response.status != 200:
-                        response_text = await response.text()
-                        print(f"错误响应内容: {response_text}")
-                        raise Exception(f"分析失败: HTTP {response.status}")
-                        
-                    result = await response.json()
-                    print(f"分析结果: {result}")
-                    
-                    # 解析标签
-                    if isinstance(result, list) and result:
-                        tag_list = [f"{tag[0]} ({tag[1]:.2f})" for tag in result]
-                        return "\n".join(tag_list)
-                    return "❌ 返回数据格式错误"
-                    
+                # 3. 获取结果
+                return await self.get_result(session)
+                
         except Exception as e:
             print(f"分析图片时出错: {str(e)}")
             return f"❌ 调用API时出错：{str(e)}"
