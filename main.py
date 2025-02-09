@@ -6,6 +6,7 @@ import time
 import aiohttp
 import uuid
 import json
+import ssl
 
 API_URL = "https://smilingwolf-wd-tagger.hf.space/gradio_api"
 
@@ -165,7 +166,13 @@ class MyPlugin(Star):
     async def analyze_image(self, image_bytes: bytes) -> str:
         """使用API分析图片标签"""
         try:
-            async with aiohttp.ClientSession() as session:
+            # 创建不验证SSL的客户端
+            ssl_context = ssl.create_default_context()
+            ssl_context.check_hostname = False
+            ssl_context.verify_mode = ssl.CERT_NONE
+            
+            connector = aiohttp.TCPConnector(ssl=ssl_context)
+            async with aiohttp.ClientSession(connector=connector) as session:
                 # 1. 上传图片
                 image_path = await self.upload_image(session, image_bytes)
                 
