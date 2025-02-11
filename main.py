@@ -33,35 +33,62 @@ class MyPlugin(Star):
                 "file_id": file_id
             }
             
+            print(f"[调试信息] 开始获取图片数据...")
+            print(f"[调试信息] 请求参数: {payloads}")
+            
             # 调用协议端API
             result = await client.api.call_action('get_image', **payloads)
+            print(f"[调试信息] API返回结果: {result}")
             
             if not isinstance(result, dict):
                 raise Exception("API返回格式错误")
-                
-            # 尝试从文件读取
+            
+            file_error = None
+            url_error = None
+            
+            # 先尝试从文件读取
             file_path = result.get('file')
             if file_path:
+                print(f"[调试信息] 尝试从文件读取: {file_path}")
                 try:
                     with open(file_path, 'rb') as f:
-                        return f.read()
+                        data = f.read()
+                        print(f"[调试信息] 文件读取成功，数据大小: {len(data)} 字节")
+                        return data
                 except Exception as e:
-                    raise Exception(f"从文件读取失败: {e}")
-                    
+                    file_error = str(e)
+                    print(f"[调试信息] 文件读取失败: {file_error}")
+            
             # 如果文件读取失败，尝试从URL下载
             url = result.get('url')
             if url:
+                print(f"[调试信息] 尝试从URL下载: {url}")
                 try:
                     async with aiohttp.ClientSession() as session:
                         async with session.get(url) as response:
+                            print(f"[调试信息] URL响应状态码: {response.status}")
                             if response.status == 200:
-                                return await response.read()
+                                data = await response.read()
+                                print(f"[调试信息] URL下载成功，数据大小: {len(data)} 字节")
+                                return data
                             else:
-                                raise Exception(f"下载失败: {response.status}")
+                                url_error = f"HTTP状态码: {response.status}"
+                                print(f"[调试信息] URL下载失败: {url_error}")
                 except Exception as e:
-                    raise Exception(f"从URL下载失败: {e}")
-                    
-            raise Exception("无法获取图片数据")
+                    url_error = str(e)
+                    print(f"[调试信息] URL下载出错: {url_error}")
+            
+            # 如果两种方式都失败了，抛出详细错误信息
+            error_msg = []
+            if file_path and file_error:
+                error_msg.append(f"文件读取失败: {file_error}")
+            if url and url_error:
+                error_msg.append(f"URL下载失败: {url_error}")
+            if not error_msg:
+                error_msg.append("未找到可用的图片来源")
+                
+            raise Exception(" | ".join(error_msg))
+            
         except Exception as e:
             raise Exception(f"获取图片数据失败: {str(e)}")
     
