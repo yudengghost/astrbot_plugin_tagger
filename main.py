@@ -10,7 +10,7 @@ import ssl
 
 API_URL = "https://smilingwolf-wd-tagger.hf.space/gradio_api"
 
-@register("tagger", "图片标签插件", "一个用于识别图像tag标签的插件", "1.0.0", "https://github.com/yudengghost/astrbot_plugin_tagger")
+@register("tagger", "yudengghost", "一个用于识别图像tag标签的插件", "1.0.0", "https://github.com/yudengghost/astrbot_plugin_tagger")
 class MyPlugin(Star):
     def __init__(self, context: Context):
         super().__init__(context)
