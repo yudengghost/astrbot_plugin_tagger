@@ -175,14 +175,14 @@ class MyPlugin(Star):
                             result_data = output.get('data', [])
                             
                             if len(result_data) >= 3:
-                                general_tags = result_data[0]
-                                character_info = result_data[2]  # 直接获取第三个元素作为角色信息
+                                general_tags = result_data[0]  # 第一个元素直接是标签字符串
+                                character_info = result_data[2]  # 第三个元素是角色信息
                                 
                                 # 构建结果字符串
                                 result = []
                                 # 添加一般标签
                                 result.append(f"标签：\n{general_tags}")
-                                
+                                print(result)
                                 # 添加角色信息（如果有）
                                 if isinstance(character_info, dict) and character_info.get('confidences'):
                                     result.append("\n角色：")
