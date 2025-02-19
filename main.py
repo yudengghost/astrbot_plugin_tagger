@@ -185,7 +185,7 @@ class MyPlugin(Star):
                                 
                                 # 添加角色信息（如果有）
                                 if isinstance(character_info, dict) and character_info.get('confidences'):
-                                    character_lines = ["\n角色："]
+                                    character_lines = ["角色："]
                                     # 按置信度排序
                                     characters = sorted(
                                         character_info['confidences'],
@@ -302,7 +302,7 @@ class MyPlugin(Star):
                 tags = await self.analyze_image(image_data)
                 
                 # 返回分析结果
-                yield event.make_result().message(f"分析结果：\n{tags}")
+                yield event.make_result().message(f"{tags}")
                 
             except Exception as e:
                 # 使用make_result创建错误提示
