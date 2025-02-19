@@ -182,7 +182,8 @@ class MyPlugin(Star):
                                 result = []
                                 # 添加一般标签
                                 result.append(f"标签：\n{general_tags}")
-                                print(result)
+                                print(general_tags)
+                                print(character_info)
                                 # 添加角色信息（如果有）
                                 if isinstance(character_info, dict) and character_info.get('confidences'):
                                     result.append("\n角色：")
