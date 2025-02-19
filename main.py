@@ -182,18 +182,24 @@ class MyPlugin(Star):
                                 result = []
                                 # 添加一般标签
                                 result.append(f"标签：\n{general_tags}")
-                                print(general_tags)
-                                print(character_info)
+                                
                                 # 添加角色信息（如果有）
                                 if isinstance(character_info, dict) and character_info.get('confidences'):
-                                    result.append("\n角色：")
+                                    character_lines = ["\n角色："]
                                     # 按置信度排序
                                     characters = sorted(
                                         character_info['confidences'],
                                         key=lambda x: x['confidence'],
                                         reverse=True
                                     )
-                                    result.append("\n".join(characters))
+                                    # 只显示置信度大于50%的角色
+                                    for char in characters:
+                                        if char['confidence'] > 0.5:
+                                            character_lines.append(
+                                                f"{char['label']} ({char['confidence']*100:.1f}%)"
+                                            )
+                                    if len(character_lines) > 1:  # 如果有角色信息（不只是标题）
+                                        result.append("\n".join(character_lines))
                                 
                                 return "\n".join(result)
                             return "❌ 未找到标签数据"
