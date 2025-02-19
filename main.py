@@ -174,8 +174,27 @@ class MyPlugin(Star):
                             output = data.get('output', {})
                             result_data = output.get('data', [])
                             
-                            if result_data and len(result_data) > 0:
-                                return result_data[0]
+                            if len(result_data) >= 3:
+                                general_tags = result_data[0]
+                                character_info = result_data[2]  # 直接获取第三个元素作为角色信息
+                                
+                                # 构建结果字符串
+                                result = []
+                                # 添加一般标签
+                                result.append(f"标签：\n{general_tags}")
+                                
+                                # 添加角色信息（如果有）
+                                if isinstance(character_info, dict) and character_info.get('confidences'):
+                                    result.append("\n角色：")
+                                    # 按置信度排序
+                                    characters = sorted(
+                                        character_info['confidences'],
+                                        key=lambda x: x['confidence'],
+                                        reverse=True
+                                    )
+                                    result.append("\n".join(characters))
+                                
+                                return "\n".join(result)
                             return "❌ 未找到标签数据"
                             
                         elif data.get('msg') == 'close_stream':
